@@ -27,7 +27,7 @@ module i2c_master_byte_ctrl (
 );
 
 	//Signals for state machine
-    reg [3:0] count;            //contador de 3 bits
+    reg [2:0] count;            //contador de 3 bits
     reg       count_finish;     //Variable per controlar si el contador ha finalitzat.
 
 	// state machine
@@ -71,6 +71,7 @@ module i2c_master_byte_ctrl (
       IDLE : if(Start) next <= START;
 	   		 else if (Read) next <= READ; //preferència a la lectura davant l'escriptura
              else if (Write) next <= WRITE;
+			 else if (Stop) next <= STOP;
 			 else next <= IDLE;
 
 	  START : if (Bit_ack) begin
@@ -121,6 +122,7 @@ module i2c_master_byte_ctrl (
 			Rx_ack <= Rx_ack;
 			Bit_cmd <= Bit_cmd;
 			I2C_done <= 1'b0; 
+			Bit_txd <= SR_sout;
 			//I2C_al <= 1'b0;
 
 		case(state)
@@ -129,6 +131,8 @@ module i2c_master_byte_ctrl (
 					if (Start) Bit_cmd <= `I2C_CMD_START;
 					else if (Read) Bit_cmd <= `I2C_CMD_READ; //preferència a la lectura davant l'escriptura
 					else if (Write) Bit_cmd <= `I2C_CMD_WRITE;
+					else if (Stop) Bit_cmd <= `I2C_CMD_STOP;
+					else Bit_cmd <= `I2C_CMD_NOP;
 			end
 
 			START : begin 
@@ -141,12 +145,12 @@ module i2c_master_byte_ctrl (
 
 			READ :  if (Bit_ack) begin
 						Bit_txd <= Tx_ack; //profe
-						//SR_shift <= 1'b1;
+						SR_shift <= 1'b1;
 						if(count_finish) begin 
 							Bit_cmd <= `I2C_CMD_WRITE;
 						end
 						else begin
-							SR_shift <= 1'b1; //Introduim nou valor
+							//SR_shift <= 1'b1; //Introduim nou valor
 							Bit_cmd <= `I2C_CMD_READ; // llegim el següent bit
 						end
 					end
@@ -155,13 +159,14 @@ module i2c_master_byte_ctrl (
 					end
 
 			WRITE : if (Bit_ack) begin
-						Rx_ack <= Tx_ack;
-						//SR_shift <= 1'b1;
-						if(count_finish) Bit_cmd <= `I2C_CMD_READ; 
+						SR_shift <= 1'b1;
+						Bit_txd <= SR_sout;
+						if(count_finish) begin 
+							Bit_cmd <= `I2C_CMD_READ; 
+							Rx_ack <= (!Tx_ack); // slave should have send NACK
+						end
 						else begin
-							SR_shift <= 1'b1; //Introduim nou valor
 							Bit_cmd <= `I2C_CMD_WRITE; // llegim el següent bit
-							Bit_txd <= SR_sout;
 						end
 					end 
 					else SR_shift <= 1'b0;
